@@ -36,7 +36,7 @@ creation_rules:
       - age:
           # Dev recipient. Grant another operator: add their age public key
           # here, then `sops updatekeys deploy/dev/secrets.enc.env`.
-          - "age1z30wyl7xuxm49djculnxgpqc0u320jvcpdq8lergyvq46n8v2qmqgv7dwd"
+          - "age1h3q3cec0nkrh0fg54x4dqu4mga3ehf6kkjs83qczcwnd8hdta3ysnh0czx"
 
   # ---- prod environment (Phase 2; recipients added when prod is built) -----
   - path_regex: deploy/prod/.*\.enc\.(env|ya?ml|json|asc)$
