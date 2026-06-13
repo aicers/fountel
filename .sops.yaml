@@ -13,6 +13,7 @@
 #     2. Add that public key to the relevant rule's `age:` list below.
 #     3. Re-key every affected file so the new recipient can read it:
 #            sops updatekeys deploy/dev/secrets.enc.env
+#            sops updatekeys deploy/dev/gnupg.secret.enc.asc
 #
 #   Revoke decryption:
 #     1. Remove the operator's public key from the rule below.
@@ -22,13 +23,15 @@
 #        with --rotate (see docs/secrets.md).
 #
 # The dev rule below carries the live dev recipient (the committed
-# deploy/dev/secrets.enc.env is encrypted to it). The prod placeholder MUST be
-# replaced before prod is built; `./deploy/dev/bin/secrets-init.sh` substitutes
-# a generated public key for a placeholder when bootstrapping an environment.
+# deploy/dev/secrets.enc.env and deploy/dev/gnupg.secret.enc.asc are encrypted
+# to it). The prod placeholder MUST be replaced before prod is built;
+# `./deploy/dev/bin/secrets-init.sh` substitutes a generated public key for a
+# placeholder when bootstrapping an environment.
 
 creation_rules:
   # ---- dev environment -----------------------------------------------------
-  - path_regex: deploy/dev/.*\.enc\.(env|ya?ml|json)$
+  # `asc` covers the armored instance GnuPG private key (gnupg.secret.enc.asc).
+  - path_regex: deploy/dev/.*\.enc\.(env|ya?ml|json|asc)$
     key_groups:
       - age:
           # Dev recipient. Grant another operator: add their age public key
@@ -36,7 +39,7 @@ creation_rules:
           - "age1z30wyl7xuxm49djculnxgpqc0u320jvcpdq8lergyvq46n8v2qmqgv7dwd"
 
   # ---- prod environment (Phase 2; recipients added when prod is built) -----
-  - path_regex: deploy/prod/.*\.enc\.(env|ya?ml|json)$
+  - path_regex: deploy/prod/.*\.enc\.(env|ya?ml|json|asc)$
     key_groups:
       - age:
           - "REPLACE_WITH_PROD_AGE_PUBLIC_KEY"

@@ -49,13 +49,18 @@ coupling between them is the published feed format and the mTLS transport.
   (LLM-enrichment) intel unless a source has been explicitly vetted and tagged
   `fountel:floor-eligible`.
 
-## What is NOT in this repo / this stage
+## What is NOT part of this dev-MISP stack
 
-- The aimer-web pull adapter (separate repo, see above).
-- The mTLS gateway, the SAN-allowlist authorization service, and feed
-  publishing (tracked separately; not part of the initial dev-stack scaffold).
+- The aimer-web pull adapter — a **separate repo** (see above), not here.
+- The **mTLS gateway** and **feed publishing** — not in this repo yet; tracked
+  separately and deferred to the additive-sync exposure work.
 - prod deployment, backups, HA, and dedicated secret/SSO infrastructure
   (Phase 2 / prod-hardening, deferred).
+
+The **SAN-allowlist authorization service** lives in this repo under
+[`gateway/san-auth/`](gateway/san-auth/) as its own component, but it is **not
+part of this dev-MISP stack** and the stack does not depend on it — the two are
+developed independently.
 
 ## Quickstart
 

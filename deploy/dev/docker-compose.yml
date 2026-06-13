@@ -120,6 +120,8 @@ services:
       - misp_logs:/var/www/MISP/app/tmp/logs/
       - misp_files:/var/www/MISP/app/files/
       - misp_ssl:/etc/nginx/certs/
+      # bin/up.sh seeds the committed instance GnuPG key (gnupg.secret.enc.asc)
+      # into this volume before boot; if absent, misp-core autogenerates one.
       - misp_gnupg:/var/www/MISP/.gnupg/
     healthcheck:
       # Target the in-container listener (443) directly so the check is

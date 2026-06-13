@@ -27,3 +27,21 @@ mv -f "$TMP" "$PLAINTEXT_FILE"
 trap - EXIT
 
 log "Decrypted secrets to $PLAINTEXT_FILE (git-ignored)."
+
+# Decrypt the instance GnuPG private key, if committed. It is optional: when
+# absent, misp-core falls back to generating its own key on first boot (see
+# up.sh / docs/secrets.md). When present, it is the committed secret material
+# that makes the instance signing key reproducible across a volume reset.
+if [ -f "$ENC_GNUPG_FILE" ]; then
+  GTMP="$(mktemp "$SECRETS_DIR/.misp.gnupg.asc.XXXXXX")"
+  trap 'rm -f "$GTMP"' EXIT
+  ( umask 077; sops --decrypt --input-type binary --output-type binary "$ENC_GNUPG_FILE" > "$GTMP" )
+  chmod 600 "$GTMP"
+  mv -f "$GTMP" "$PLAINTEXT_GNUPG_FILE"
+  trap - EXIT
+  log "Decrypted GnuPG private key to $PLAINTEXT_GNUPG_FILE (git-ignored)."
+else
+  # Stale plaintext would otherwise survive after the encrypted key is removed.
+  rm -f "$PLAINTEXT_GNUPG_FILE"
+  log "No committed GnuPG key ($ENC_GNUPG_FILE); misp-core will autogenerate one."
+fi

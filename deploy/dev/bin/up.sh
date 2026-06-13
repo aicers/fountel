@@ -21,6 +21,37 @@ fi
 
 "$BIN_DIR/secrets-decrypt.sh"
 
+# Seed the committed instance GnuPG key into the misp_gnupg volume BEFORE
+# misp-core boots. Upstream's configure_gnupg uses an existing key when
+# ${GPG_DIR}/trustdb.gpg is present and only autogenerates one otherwise, so
+# pre-seeding the volume is the image's own supported path — no fork. When no
+# key was committed, this step is skipped and misp-core autogenerates as
+# before. Idempotent: the one-shot leaves an already-seeded volume untouched,
+# so it never clobbers a running instance's key (reset with `down -v` to adopt
+# a freshly committed key).
+if [ -f "$PLAINTEXT_GNUPG_FILE" ]; then
+  log "Seeding instance GnuPG key into the misp_gnupg volume (if not already present)..."
+  ( cd "$DEV_DIR" && docker compose run --rm --no-deps --user root \
+      --entrypoint /bin/bash \
+      -v "$PLAINTEXT_GNUPG_FILE:/tmp/fountel-gnupg.asc:ro" \
+      misp-core -c '
+        set -euo pipefail
+        GPG_DIR=/var/www/MISP/.gnupg
+        if [ -f "$GPG_DIR/trustdb.gpg" ]; then
+          echo "... GnuPG key already present in volume; leaving it untouched."
+          exit 0
+        fi
+        mkdir -p "$GPG_DIR"; chmod 700 "$GPG_DIR"
+        gpg --homedir "$GPG_DIR" --batch --import /tmp/fountel-gnupg.asc
+        gpg --homedir "$GPG_DIR" --batch --check-trustdb
+        chown -R www-data:www-data "$GPG_DIR"
+        find "$GPG_DIR" -type f -exec chmod 600 {} \;
+        find "$GPG_DIR" -type d -exec chmod 700 {} \;
+        echo "... imported committed GnuPG key into the misp_gnupg volume."
+      ' ) \
+    || die "Failed to seed the GnuPG key into the misp_gnupg volume. Check: docker compose logs"
+fi
+
 log "Starting dev MISP stack..."
 ( cd "$DEV_DIR" && docker compose up -d )
 
