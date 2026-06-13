@@ -1,0 +1,14 @@
+{
+  "namespace": "fountel",
+  "description": "fountel curation tags for the additive threat intel published to aimer-web. Curation is soft-by-default: everything published is treated as soft (LLM-enrichment) intel unless a source has been per-source vetted and explicitly tagged floor-eligible.",
+  "version": 1,
+  "exclusive": false,
+  "predicates": [
+    {
+      "value": "floor-eligible",
+      "expanded": "Floor-eligible (vetted, deterministic-grade)",
+      "description": "Marks intel from a per-source-vetted feed that aimer-web may treat as floor-eligible (deterministic-grade), setting floorEligible on the match. Absence of this tag is the default and means soft (LLM-enrichment) only. Apply only after explicit per-source vetting; more is not better.",
+      "colour": "#c0392b"
+    }
+  ]
+}
