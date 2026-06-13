@@ -21,17 +21,19 @@
 #        hold a copy of the old plaintext) — re-run ./bin/secrets-init.sh
 #        with --rotate (see docs/secrets.md).
 #
-# The placeholder keys below MUST be replaced before first use.
-# `./deploy/dev/bin/secrets-init.sh` does this automatically for the dev rule,
-# substituting the public key it generates for the placeholder.
+# The dev rule below carries the live dev recipient (the committed
+# deploy/dev/secrets.enc.env is encrypted to it). The prod placeholder MUST be
+# replaced before prod is built; `./deploy/dev/bin/secrets-init.sh` substitutes
+# a generated public key for a placeholder when bootstrapping an environment.
 
 creation_rules:
   # ---- dev environment -----------------------------------------------------
   - path_regex: deploy/dev/.*\.enc\.(env|ya?ml|json)$
     key_groups:
       - age:
-          # Replaced by secrets-init.sh with the dev operator's public key.
-          - "REPLACE_WITH_DEV_AGE_PUBLIC_KEY"
+          # Dev recipient. Grant another operator: add their age public key
+          # here, then `sops updatekeys deploy/dev/secrets.enc.env`.
+          - "age1z30wyl7xuxm49djculnxgpqc0u320jvcpdq8lergyvq46n8v2qmqgv7dwd"
 
   # ---- prod environment (Phase 2; recipients added when prod is built) -----
   - path_regex: deploy/prod/.*\.enc\.(env|ya?ml|json)$

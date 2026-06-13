@@ -89,23 +89,23 @@ Install the tooling (macOS shown; use your package manager):
 brew install sops age
 ```
 
-### A. First operator (creates the secrets)
+### A. The committed dev secrets
 
-```sh
-cd deploy/dev
+The encrypted dev secrets are **already committed** as
+`deploy/dev/secrets.enc.env`, encrypted to the dev recipient in `.sops.yaml`.
+You do not create them — you obtain a key that can decrypt them (section B),
+then bring the stack up (section C). The decryption key itself lives **outside
+the repo**: the bootstrap operator who generated it holds it in the team
+secret store and grants other operators by adding their public key as a
+recipient.
 
-# Generates an age key at ~/.config/sops/age/keys.txt if absent, writes your
-# public key into .sops.yaml's dev rule, and produces the encrypted
-# secrets.enc.env with strong random values.
-./bin/secrets-init.sh
-
-# Commit the encrypted artifacts (NEVER the plaintext or the age key).
-git add ../../.sops.yaml secrets.enc.env
-git commit -m "Add dev MISP secrets (sops-encrypted)"
-```
-
-Back up `~/.config/sops/age/keys.txt` somewhere safe. **Losing it means losing
-the ability to decrypt** (you would have to rotate everything).
+> **Re-bootstrapping from scratch (rare).** If you are standing up an entirely
+> new environment, or the encrypted file and every key copy were lost,
+> `./bin/secrets-init.sh` regenerates the age key + encrypted file; commit
+> `.sops.yaml` and `secrets.enc.env`. Use `--rotate` to regenerate the secret
+> *values* of an existing environment (then reset volumes — see Rotation
+> above). For the committed dev environment, neither is part of normal
+> bring-up.
 
 ### B. Additional operator (already has the encrypted file)
 

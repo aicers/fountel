@@ -62,13 +62,13 @@ coupling between them is the published feed format and the mTLS transport.
 The dev stack lives under [`deploy/dev/`](deploy/dev/). To bring it up you
 need the sops decryption key for this environment.
 
+The encrypted dev secrets are already committed; you just need a key that can
+decrypt them (see [docs/secrets.md](docs/secrets.md), "Additional operator").
+
 ```sh
 cd deploy/dev
 
-# First time only: generate the local age key and the encrypted secrets.
-./bin/secrets-init.sh
-
-# Every bring-up: decrypt secrets and start the stack.
+# Every bring-up: decrypt the committed secrets and start the stack.
 ./bin/up.sh
 
 # Apply fountel-specific config (taxonomy, baseline settings). Idempotent.

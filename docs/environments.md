@@ -11,7 +11,7 @@ deploy/
     docker-compose.yml     # misp-core + MariaDB + Redis(Valkey) + misp-modules, pinned
     .env.example           # non-secret compose interpolation vars
     secrets.example.env    # secret schema (placeholders, non-secret)
-    secrets.enc.env        # sops-encrypted secrets (created by bin/secrets-init.sh)
+    secrets.enc.env        # sops-encrypted secrets (committed; the only secret artifact in the repo)
     secrets/               # git-ignored decrypted plaintext (created at deploy)
     taxonomies/fountel/    # fountel:floor-eligible taxonomy definition
     bin/                   # secrets-init, secrets-decrypt, up, bootstrap

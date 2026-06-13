@@ -9,9 +9,10 @@ verification step prints something you can check.
 - [`sops`](https://github.com/getsops/sops) and
   [`age`](https://github.com/FiloSottile/age) on your PATH.
 - `python3` (for the taxonomy-enable step in bootstrap).
-- The **sops decryption key** for the dev environment. If you are the first
-  operator, the bootstrap script generates one; otherwise obtain decryption
-  rights first — see [secrets.md](secrets.md), "Dev secret bootstrap".
+- The **sops decryption key** for the dev environment — a key whose public
+  half is a recipient of the committed `secrets.enc.env`. New operators get
+  added as a recipient first; see [secrets.md](secrets.md), "Additional
+  operator".
 
 ```sh
 docker compose version          # expect: Docker Compose version v2.x
@@ -26,23 +27,23 @@ cd deploy/dev
 
 ## 1. Secrets
 
-First operator (creates the encrypted secrets), one time:
+The sops-encrypted dev secrets ship **already committed** as
+`deploy/dev/secrets.enc.env`, and `.sops.yaml` carries the dev recipient. You
+do **not** generate them — you only need a key that can decrypt them. If you
+are a new operator, get added as a recipient first (see
+[secrets.md](secrets.md), "Additional operator"); then `up.sh` decrypts for
+you in step 2.
 
-```sh
-./bin/secrets-init.sh
-git add ../../.sops.yaml secrets.enc.env
-git commit -m "Add dev MISP secrets (sops-encrypted)"
-```
-
-Already have `secrets.enc.env` and a key that can decrypt it? Skip straight to
-step 2 — `up.sh` decrypts for you.
-
-Verify the encrypted file is real ciphertext (no plaintext leaked):
+Verify the committed file is real ciphertext (no plaintext leaked):
 
 ```sh
 grep -q 'sops' secrets.enc.env && echo "OK: sops-encrypted"
 grep -Eq 'ENC\[' secrets.enc.env && echo "OK: values are encrypted"
 ```
+
+> Standing up a brand-new environment, or rotating? `./bin/secrets-init.sh`
+> generates the key + encrypted file (and `--rotate` regenerates values). For
+> the committed dev environment this is **not** part of normal bring-up.
 
 ## 2. Bring the stack up
 
