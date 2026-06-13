@@ -1,0 +1,11 @@
+# SAN allowlist for the MISP mTLS gateway — PRODUCTION environment.
+#
+# Authorization is by stable SAN value, never by certificate fingerprint
+# (the bootroot rotates certs frequently). A client is allowed iff at
+# least one DNS/URI SAN on its bootroot-validated certificate matches an
+# entry below exactly.
+#
+# Each entry is the exact SAN string; the trailing comment names the peer.
+allowed_sans:
+  - aimer-web-prod-1.fountel.internal       # aimer-web-prod-1
+  - spiffe://fountel.prod/aimer/ingest      # aimer-ingest-prod (URI SAN)
