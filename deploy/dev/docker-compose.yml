@@ -10,10 +10,9 @@
 #   `_FILE` / `/run/secrets` convention. Forcing Docker `secrets:` would mean
 #   patching the upstream entrypoint — a fork-like change ruled out by the
 #   "upstream MISP, no fork/build" invariant. So secrets are delivered through
-#   a single, obvious inject path: the deploy step decrypts the committed
-#   sops file `secrets.enc.env` into the git-ignored `secrets/misp.secrets.env`,
-#   which every service loads via `env_file:`. Only the encrypted file is
-#   committed; the decrypted plaintext never leaves the git-ignored dir.
+#   a single, obvious inject path: `bin/secrets-init.sh` generates random dev
+#   secrets locally into the git-ignored `secrets/misp.secrets.env`, which every
+#   service loads via `env_file:`. Nothing secret is committed.
 
 name: fountel-dev
 
@@ -102,7 +101,7 @@ services:
       - "ADMIN_EMAIL=${ADMIN_EMAIL:-admin@fountel.local}"
       - "ADMIN_ORG=${ADMIN_ORG:-fountel}"
       # Hardening: do not print the admin credentials to the container log.
-      # The admin password is known from secrets.enc.env, so it is not needed
+      # The admin password is in secrets/misp.secrets.env, so it is not needed
       # in the log. Set to "false" for a one-off if you must recover it.
       - "DISABLE_PRINTING_PLAINTEXT_CREDENTIALS=true"
       - "ENABLE_DB_SETTINGS=false"
@@ -120,8 +119,8 @@ services:
       - misp_logs:/var/www/MISP/app/tmp/logs/
       - misp_files:/var/www/MISP/app/files/
       - misp_ssl:/etc/nginx/certs/
-      # bin/up.sh seeds the committed instance GnuPG key (gnupg.secret.enc.asc)
-      # into this volume before boot; if absent, misp-core autogenerates one.
+      # misp-core autogenerates its instance GnuPG key here on first boot,
+      # locked with the generated GPG_PASSPHRASE; the key persists in this volume.
       - misp_gnupg:/var/www/MISP/.gnupg/
     healthcheck:
       # Target the in-container listener (443) directly so the check is
