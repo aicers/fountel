@@ -40,9 +40,9 @@ coupling between them is the published feed format and the mTLS transport.
 - **Connection is periodic pull/sync, not query-time.** aimer-web pulls
   published feeds into its own store and matches locally; observed indicators
   never egress to MISP.
-- **Secrets** are stored as [sops](https://github.com/getsops/sops)-encrypted
-  files in this repo and decrypted into a git-ignored `secrets/` directory at
-  deploy time. No plaintext secret material is ever committed.
+- **Secrets** are random and disposable in dev: they are generated locally at
+  bring-up into a git-ignored `secrets/` directory. No secret material is ever
+  committed. (prod will inject secrets from a secret manager — Phase 2.)
 - **Operator auth** is MISP's built-in local auth (roles / ACL / API keys).
   No external SSO in v1.
 - **Curation is soft-by-default**: everything published is treated as soft
@@ -64,16 +64,18 @@ developed independently.
 
 ## Quickstart
 
-The dev stack lives under [`deploy/dev/`](deploy/dev/). To bring it up you
-need the sops decryption key for this environment.
-
-The encrypted dev secrets are already committed; you just need a key that can
-decrypt them (see [docs/secrets.md](docs/secrets.md), "Additional operator").
+The dev stack lives under [`deploy/dev/`](deploy/dev/). Dev generates its own
+secrets locally at bring-up — nothing secret is committed and there is no
+sops/age key to obtain. You only need Docker, `openssl`, and `python3` (see the
+[runbook](docs/runbook.md)).
 
 ```sh
 cd deploy/dev
 
-# Every bring-up: decrypt the committed secrets and start the stack.
+# Generate local dev secrets (or let up.sh do it automatically on first run).
+./bin/secrets-init.sh
+
+# Every bring-up: start the stack.
 ./bin/up.sh
 
 # Apply fountel-specific config (taxonomy, baseline settings). Idempotent.
@@ -89,7 +91,7 @@ bootstrap, curation policy, and environment layout.
 | Document | What it covers |
 | --- | --- |
 | [docs/runbook.md](docs/runbook.md) | Bring the dev stack up from scratch, with verification commands. |
-| [docs/secrets.md](docs/secrets.md) | sops, `.sops.yaml` recipient policy, and the dev secret bootstrap procedure. |
+| [docs/secrets.md](docs/secrets.md) | Local dev secret generation (nothing committed) and the bootstrap procedure. |
 | [docs/curation.md](docs/curation.md) | The `fountel:floor-eligible` taxonomy and the soft-by-default curation policy. |
 | [docs/environments.md](docs/environments.md) | dev/prod environment layout and what is deferred to prod. |
 

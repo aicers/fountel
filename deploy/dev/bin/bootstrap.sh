@@ -10,7 +10,7 @@
 #   1. Loads the fountel:floor-eligible taxonomy into MISP and enables it.
 #   2. Applies baseline security / hardening settings.
 #
-# Requires the stack to be running (./bin/up.sh) and the decrypted secrets
+# Requires the stack to be running (./bin/up.sh) and the generated secrets
 # (for ADMIN_KEY). Needs python3 on the host for the taxonomy-enable API call.
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"

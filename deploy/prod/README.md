@@ -9,11 +9,13 @@ Open decisions captured for when prod is on the table:
 - **HA stance:** likely single-instance + strong backups for v1.
 - **Backups:** MariaDB + MISP `files/` (attachments, **GnuPG private key**) +
   config; method, cadence, retention, encryption, restore drill, RTO/RPO.
+- **Secrets:** injected from a **secret manager** (not sops, and nothing in the
+  repo). Tracked in #1's deferred list.
 - **Isolation:** separate hosts, separate bootroot intermediates, separate
-  sops recipients and SAN allowlists from dev.
+  secret-manager scopes and SAN allowlists from dev.
 
-Secret isolation is already reserved: `.sops.yaml` has a
-`deploy/prod/*.enc.*` recipient rule distinct from dev, so prod secrets will
-never be decryptable with a dev key.
+Secret isolation is by design: prod secrets come from a prod-scoped secret
+manager, distinct from dev's locally-generated secrets, so they never share
+state.
 
 Until this environment is defined, use [`deploy/dev/`](../dev/).
