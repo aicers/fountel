@@ -16,6 +16,10 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 require_cmd docker "https://docs.docker.com/get-docker/"
+# python3 drives the taxonomy enable + verification below. It is a documented
+# prerequisite (docs/runbook.md) and the taxonomy is a required deliverable, so
+# its absence is a hard failure rather than a skipped step.
+require_cmd python3 "https://www.python.org/downloads/"
 
 dc() { ( cd "$DEV_DIR" && docker compose "$@" ); }
 cake() { dc exec -T -u www-data misp-core /var/www/MISP/app/Console/cake "$@"; }
@@ -49,11 +53,14 @@ TAX_DIR=/var/www/MISP/app/files/taxonomies/fountel
 dc exec -T misp-core mkdir -p "$TAX_DIR"
 dc cp "$DEV_DIR/taxonomies/fountel/machinetag.json" "misp-core:$TAX_DIR/machinetag.json"
 dc exec -T misp-core chown -R www-data:www-data "$TAX_DIR"
-cake Admin updateTaxonomies >/dev/null || warn "updateTaxonomies returned non-zero (continuing)."
+cake Admin updateTaxonomies >/dev/null || die "updateTaxonomies failed; check: docker compose logs misp-core"
 
-# Enable the taxonomy and create its tag via the REST API (no cake equivalent).
-if command -v python3 >/dev/null 2>&1; then
-  ADMIN_KEY="$ADMIN_KEY" MISP_URL="https://localhost:${HTTPS_PORT}" python3 - <<'PY' || warn "Taxonomy enable via API failed; enable 'fountel' manually in the UI (Taxonomies)."
+# Enable the taxonomy, create its tag, and VERIFY both via the REST API (no
+# cake equivalent). A working fountel:floor-eligible taxonomy is a required
+# acceptance criterion, so any failure here is fatal: bootstrap must not report
+# success unless 'fountel' is enabled and 'fountel:floor-eligible' exists.
+ADMIN_KEY="$ADMIN_KEY" MISP_URL="https://localhost:${HTTPS_PORT}" python3 - <<'PY' \
+  || die "Taxonomy enable/verify failed; check: docker compose logs misp-core"
 import json, os, ssl, sys, time, urllib.error, urllib.request
 
 base = os.environ["MISP_URL"]
@@ -98,11 +105,20 @@ if tid is None:
 
 call("POST", f"/taxonomies/enable/{tid}")   # idempotent: enabling an enabled taxonomy is a no-op
 call("POST", f"/taxonomies/addTag/{tid}")   # create/enable all of its tags (fountel:floor-eligible)
-print(f"fountel taxonomy (id={tid}) enabled, tags created.")
+
+# Verify the required end state rather than trusting the calls above: re-fetch
+# the taxonomy and confirm it is enabled AND its fountel:floor-eligible tag now
+# exists. Exit non-zero (-> bootstrap dies) if either is not true.
+view = call("GET", f"/taxonomies/view/{tid}")
+tax = view.get("Taxonomy", {}) if isinstance(view, dict) else {}
+if str(tax.get("enabled")).lower() not in ("1", "true"):
+    print("fountel taxonomy is not enabled after enable call", file=sys.stderr); sys.exit(1)
+entries = view.get("entries", []) if isinstance(view, dict) else []
+if not any(e.get("tag") == "fountel:floor-eligible" and e.get("existing_tag")
+           for e in entries):
+    print("fountel:floor-eligible tag not found after addTag", file=sys.stderr); sys.exit(1)
+print(f"fountel taxonomy (id={tid}) enabled and fountel:floor-eligible tag verified.")
 PY
-else
-  warn "python3 not found — skipping taxonomy enable. Enable 'fountel' in the UI: Event Actions > Taxonomies."
-fi
 
 # --- 2. baseline settings / hardening --------------------------------------
 log "Applying baseline settings..."

@@ -71,6 +71,13 @@ files (`sops updatekeys deploy/dev/secrets.enc.env`).
 secret values (`./bin/secrets-init.sh --rotate`) — a former recipient may
 still hold old plaintext.
 
+`secrets-init.sh` treats this policy as authoritative, so a rotation can never
+silently narrow it: it bootstrap-encrypts the new values to the local key, then
+runs `sops updatekeys` to re-key the committed file to *every* recipient the
+dev rule lists (so other dev operators keep access across a `--rotate`). If the
+local operator's key is not in `.sops.yaml`, the script fails rather than ship a
+file that does not match the policy — add the key to the rule first.
+
 > **Rotation takes effect only after a volume reset.** MariaDB and MISP bake
 > the DB password into their persistent volumes (`mysql_data`, `misp_configs`)
 > on first init and do not re-read it on a plain restart. After rotating,

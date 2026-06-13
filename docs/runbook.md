@@ -143,10 +143,14 @@ docker compose down -v              # stop and DELETE all data (full reset)
 - **Port already in use:** edit `CORE_HTTP_PORT` / `CORE_HTTPS_PORT` (and the
   port in `BASE_URL`) in `deploy/dev/.env`, then `./bin/up.sh` again.
 - **`misp-core` never healthy:** `docker compose logs -f misp-core`. First boot
-  is slow; the healthcheck allows a 60s start period plus retries.
+  is slow; the healthcheck allows a 60s start period plus retries. `up.sh --wait`
+  exits non-zero (instead of reporting success) if it never goes healthy.
 - **Cannot decrypt:** you do not hold a recipient key for `secrets.enc.env`.
   See [secrets.md](secrets.md), "Additional operator".
-- **Taxonomy enable skipped:** install `python3`, or enable `fountel` manually
-  in the UI, then re-run `./bin/bootstrap.sh`.
+- **Bootstrap fails on taxonomy:** `bootstrap.sh` verifies that `fountel` is
+  enabled and `fountel:floor-eligible` exists, and exits non-zero otherwise (it
+  does not skip when `python3` is missing — that is a hard prerequisite).
+  Install `python3`, check `docker compose logs misp-core`, then re-run
+  `./bin/bootstrap.sh` (it is idempotent).
 - **Bumping versions:** change the pinned tags in `docker-compose.yml`, then
   `docker compose pull && ./bin/up.sh`.

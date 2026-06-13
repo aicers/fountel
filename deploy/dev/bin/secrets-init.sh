@@ -41,8 +41,9 @@ if grep -q "REPLACE_WITH_DEV_AGE_PUBLIC_KEY" "$SOPS_CONFIG"; then
   rm -f "$SOPS_CONFIG.bak"
   log "Wrote dev recipient into $SOPS_CONFIG."
 elif ! grep -q "$RECIPIENT" "$SOPS_CONFIG"; then
-  warn "Your recipient is not listed in $SOPS_CONFIG. Add it to the dev rule"
-  warn "and run: sops updatekeys $ENC_FILE"
+  die "Your recipient ($RECIPIENT) is not listed in $SOPS_CONFIG. Add it to the
+dev rule's age: list and re-run, so the committed secrets.enc.env stays
+encrypted to the recipients the policy declares (it is the source of truth)."
 fi
 
 # --- 3. generate + encrypt secrets -----------------------------------------
@@ -72,20 +73,30 @@ EOF
 )
 
 [ "$ROTATE" -eq 1 ] && warn "Rotating: existing user passwords and API keys will be invalidated."
-# Encrypt to the explicit recipient. We pass --config /dev/null so sops does
-# NOT try to match a creation_rule for the temp input path: rules in .sops.yaml
-# are keyed on the committed path (deploy/dev/*.enc.*), which the mktemp path
-# never matches, and a discovered-but-unmatched config makes sops fail even
-# when --age is given. The recipient written into .sops.yaml above remains the
-# source of truth for `sops updatekeys` (grant/revoke), which is path-matched.
+# Encryption is two steps so the committed file always matches the .sops.yaml
+# recipient policy (the single source of truth), even on --rotate:
+#
+#   1. Bootstrap-encrypt to the local recipient with --config /dev/null. sops
+#      keys creation_rules on the committed path (deploy/dev/*.enc.*), which the
+#      mktemp input path never matches, and a discovered-but-unmatched config
+#      makes sops fail even when --age is given — so we skip rule matching here.
+#   2. Re-key the file IN PLACE with `sops updatekeys`, which path-matches the
+#      committed file against .sops.yaml and re-encrypts the data key to EVERY
+#      recipient that rule lists. Without this, --rotate would silently drop any
+#      other dev recipients already in the policy and ship a file only the local
+#      operator could read.
+#
 # Write atomically: a failed encrypt must never leave a partial/empty
 # secrets.enc.env behind, or the idempotency guard above would treat the
 # broken file as "already created" on the next run.
+export SOPS_AGE_KEY_FILE="$AGE_KEY_FILE"
 ENC_TMP="$(mktemp "$DEV_DIR/.secrets.enc.env.XXXXXX")"
 trap 'rm -f "$TMP" "$ENC_TMP"' EXIT
 sops --config /dev/null --encrypt --age "$RECIPIENT" \
   --input-type dotenv --output-type dotenv "$TMP" > "$ENC_TMP"
 mv -f "$ENC_TMP" "$ENC_FILE"
+# Re-key to the full policy. Run from REPO_ROOT so sops discovers .sops.yaml.
+( cd "$REPO_ROOT" && sops updatekeys --yes "$ENC_FILE" >/dev/null )
 
-log "Wrote encrypted secrets to $ENC_FILE."
+log "Wrote encrypted secrets to $ENC_FILE (keyed to the .sops.yaml recipients)."
 log "Commit it. Then run ./bin/up.sh to decrypt and start the stack."
