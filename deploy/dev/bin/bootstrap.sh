@@ -125,8 +125,19 @@ log "Applying baseline settings..."
 # --force: some settings carry a guard validator that rejects an otherwise
 # valid value (e.g. MISP.disable_emailing reports "E-mailing is blocked" and
 # refuses the change without it). We are deliberately applying the dev baseline,
-# so bypass those guards. Unknown setting names still error and surface a warn.
-set_setting() { cake Admin setSetting --force "$1" "$2" >/dev/null 2>&1 || warn "could not set $1"; }
+# so bypass those guards. Unknown setting names still error.
+#
+# Baseline hardening is part of #3's scope, so a failure here is FATAL rather
+# than a warning: a typo/rename in a setting name, a permission/config-write
+# failure, or a rejected value must not leave MISP.live, the password policy,
+# email disabling, or enrichment wiring unapplied while the operator sees a
+# successful "Bootstrap complete". The error output is surfaced, not swallowed.
+set_setting() {
+  local out
+  if ! out=$(cake Admin setSetting --force "$1" "$2" 2>&1); then
+    die "could not apply baseline setting $1: ${out:-<no output>}"
+  fi
+}
 
 set_setting "MISP.baseurl"                       "$BASE_URL"
 set_setting "MISP.external_baseurl"              "$BASE_URL"

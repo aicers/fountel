@@ -152,5 +152,10 @@ docker compose down -v              # stop and DELETE all data (full reset)
   does not skip when `python3` is missing — that is a hard prerequisite).
   Install `python3`, check `docker compose logs misp-core`, then re-run
   `./bin/bootstrap.sh` (it is idempotent).
+- **Bootstrap fails on a baseline setting:** applying the baseline hardening is
+  required, so a `setSetting` failure (unknown/renamed setting name, config-write
+  or permission error, rejected value) aborts the bootstrap with the cake error
+  rather than printing "Bootstrap complete". Check `docker compose logs
+  misp-core`, fix the cause, then re-run `./bin/bootstrap.sh` (it is idempotent).
 - **Bumping versions:** change the pinned tags in `docker-compose.yml`, then
   `docker compose pull && ./bin/up.sh`.

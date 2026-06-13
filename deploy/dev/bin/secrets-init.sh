@@ -91,12 +91,28 @@ EOF
 # broken file as "already created" on the next run.
 export SOPS_AGE_KEY_FILE="$AGE_KEY_FILE"
 ENC_TMP="$(mktemp "$DEV_DIR/.secrets.enc.env.XXXXXX")"
-trap 'rm -f "$TMP" "$ENC_TMP"' EXIT
+# On --rotate, preserve the existing committed file so a failed re-key can be
+# rolled back: updatekeys must run on the committed path (it path-matches
+# .sops.yaml), so we have to move the new file into place BEFORE re-keying. If
+# updatekeys then fails, the working tree would otherwise hold a non-policy file
+# encrypted only to the local operator — exactly the policy drift we prevent.
+ENC_BACKUP=""
+[ -f "$ENC_FILE" ] && ENC_BACKUP="$(mktemp "$DEV_DIR/.secrets.enc.env.bak.XXXXXX")" && cp -p "$ENC_FILE" "$ENC_BACKUP"
+trap 'rm -f "$TMP" "$ENC_TMP" "$ENC_BACKUP"' EXIT
 sops --config /dev/null --encrypt --age "$RECIPIENT" \
   --input-type dotenv --output-type dotenv "$TMP" > "$ENC_TMP"
 mv -f "$ENC_TMP" "$ENC_FILE"
 # Re-key to the full policy. Run from REPO_ROOT so sops discovers .sops.yaml.
-( cd "$REPO_ROOT" && sops updatekeys --yes "$ENC_FILE" >/dev/null )
+if ! ( cd "$REPO_ROOT" && sops updatekeys --yes "$ENC_FILE" >/dev/null ); then
+  if [ -n "$ENC_BACKUP" ]; then
+    mv -f "$ENC_BACKUP" "$ENC_FILE"
+    die "sops updatekeys failed; restored the previous $ENC_FILE so no non-policy
+secret is left behind. Fix the .sops.yaml recipient policy and re-run."
+  fi
+  rm -f "$ENC_FILE"
+  die "sops updatekeys failed; removed the partial $ENC_FILE (no prior version to
+restore). Fix the .sops.yaml recipient policy and re-run."
+fi
 
 log "Wrote encrypted secrets to $ENC_FILE (keyed to the .sops.yaml recipients)."
 log "Commit it. Then run ./bin/up.sh to decrypt and start the stack."

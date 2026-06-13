@@ -76,7 +76,11 @@ silently narrow it: it bootstrap-encrypts the new values to the local key, then
 runs `sops updatekeys` to re-key the committed file to *every* recipient the
 dev rule lists (so other dev operators keep access across a `--rotate`). If the
 local operator's key is not in `.sops.yaml`, the script fails rather than ship a
-file that does not match the policy — add the key to the rule first.
+file that does not match the policy — add the key to the rule first. If the
+re-key step itself fails (bad `.sops.yaml`, an added recipient with no valid
+key), the script restores the previous committed `secrets.enc.env` (or removes
+the partial file on a first run) before aborting, so a failed rotation can never
+leave a commit-ready file encrypted only to the local operator.
 
 > **Rotation takes effect only after a volume reset.** MariaDB and MISP bake
 > the DB password into their persistent volumes (`mysql_data`, `misp_configs`)
