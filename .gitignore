@@ -25,6 +25,10 @@ deploy/*/ssl/
 deploy/*/gnupg/
 deploy/*/custom/
 
+# Gateway mTLS PEMs: externally-provisioned bootroot certs in prod; throwaway
+# dev certs minted locally by bin/gen-dev-certs.sh. Never committed.
+deploy/*/gateway/certs/
+
 # ---------------------------------------------------------------------------
 # OS / editor noise
 # ---------------------------------------------------------------------------
@@ -34,3 +38,7 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+# Python bytecode (the feed-exporter script runs in its container, not locally)
+__pycache__/
+*.pyc

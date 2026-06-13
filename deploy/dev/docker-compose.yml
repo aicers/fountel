@@ -106,9 +106,13 @@ services:
       - "DISABLE_PRINTING_PLAINTEXT_CREDENTIALS=true"
       - "ENABLE_DB_SETTINGS=false"
       - "TZ=${TZ:-UTC}"
+    # Admin-only host publish, bound to LOOPBACK (issue #4): misp-core's UI/API
+    # must NOT be externally reachable. Only the mTLS gateway's feed port is
+    # bound to a non-loopback interface. Reach the UI/API at
+    # https://127.0.0.1:8443 on the host, or over the internal compose network.
     ports:
-      - "${CORE_HTTP_PORT:-8080}:80"
-      - "${CORE_HTTPS_PORT:-8443}:443"
+      - "127.0.0.1:${CORE_HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${CORE_HTTPS_PORT:-8443}:443"
     # Named volumes (not host bind mounts) for all MISP runtime state. This
     # keeps config and DB in lockstep: `docker compose down -v` wipes them
     # together for a true from-scratch reset. Host bind mounts would persist
@@ -131,6 +135,78 @@ services:
       retries: 10
       start_period: 60s
 
+  # --- additive-sync exposure (issue #4) -----------------------------------
+  # The three services below extend the stack with the authenticated,
+  # authorized feed edge. Only `gateway` binds a non-loopback host port.
+
+  # #2 SAN-allowlist authorization service. Reachable ONLY on the private
+  # `gateway` network (internal: true → no host publish, no egress); nginx
+  # calls it via auth_request. Built from the merged gateway/san-auth.
+  san-auth:
+    build:
+      context: ../../gateway/san-auth
+    image: fountel/san-auth:dev
+    restart: always
+    environment:
+      - "FOUNTEL_ENV=dev"
+      - "TZ=${TZ:-UTC}"
+    networks:
+      - gateway
+
+  # nginx mTLS edge — the ONLY externally-reachable service, serving ONLY the
+  # feed path. Terminates mTLS against the bootroot, delegates authorization to
+  # san-auth, and statically serves the atomically-published feed snapshot.
+  gateway:
+    image: nginx:1.27-alpine
+    restart: always
+    depends_on:
+      # Healthy (not just started) so nginx never starts authless and the
+      # san-auth DNS name resolves before nginx parses the upstream.
+      san-auth:
+        condition: service_healthy
+    # The mTLS feed port is the only address bound to a non-loopback interface.
+    ports:
+      - "${FEED_HTTPS_PORT:-18443}:8443"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Externally-provisioned bootroot PEMs (server cert/key + CA bundle),
+      # mounted read-only. In dev, minted by bin/gen-dev-certs.sh into
+      # gateway/certs/ (git-ignored). See gateway/README.md.
+      - ./gateway/certs:/etc/nginx/certs:ro
+      # The published snapshot, read-only — nginx never writes the feed.
+      - feed_data:/srv/feed:ro
+    networks:
+      - edge
+      - gateway
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+  # Scheduled feed-export job: MISP-native feed generation (PyMISP) under the
+  # pinned additive filter, atomic-swapped into the shared publish volume.
+  # Lives on the internal app network to reach misp-core's REST API.
+  feed-exporter:
+    build:
+      context: ./feed-exporter
+    image: fountel/feed-exporter:dev
+    restart: always
+    depends_on:
+      misp-core:
+        condition: service_healthy
+    env_file:
+      # Provides ADMIN_KEY (the MISP automation key) to authenticate exports.
+      - ./secrets/misp.secrets.env
+    environment:
+      - "MISP_URL=${EXPORT_MISP_URL:-https://misp-core}"
+      - "MISP_VERIFY_SSL=${EXPORT_MISP_VERIFY_SSL:-false}"
+      - "FEED_EXPORT_INTERVAL=${FEED_EXPORT_INTERVAL:-300}"
+      - "TZ=${TZ:-UTC}"
+    volumes:
+      - feed_data:/feed
+
 volumes:
   mysql_data:
   cache_data:
@@ -139,3 +215,15 @@ volumes:
   misp_files:
   misp_ssl:
   misp_gnupg:
+  # Shared publish volume: written by feed-exporter, served read-only by the
+  # gateway. Holds snapshots/ and the atomically-swapped `public` symlink.
+  feed_data:
+
+networks:
+  # Implicit `default` carries the MISP app services + feed-exporter.
+  # Edge network for the gateway's published mTLS port (host-reachable).
+  edge:
+  # Private gateway network for nginx <-> san-auth. internal: true means no
+  # host publish and no egress — san-auth is reachable only here.
+  gateway:
+    internal: true

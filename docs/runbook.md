@@ -129,6 +129,46 @@ on every full reset** — `docker compose down -v` then `./bin/up.sh` produces a
 new key. Dev does not pin this key; feed authenticity rides on mTLS + content
 hashes, not GPG-signature pinning.
 
+## 4b. mTLS gateway & published feed (issue #4)
+
+`./bin/up.sh` also starts the `gateway` (nginx mTLS edge), `san-auth`
+(authorization), and `feed-exporter` (scheduled feed generation). The gateway is
+the **only** externally-reachable service; misp-core's host publish is bound to
+loopback. `up.sh` mints throwaway dev mTLS certs on first run (in prod these are
+externally provisioned — see [gateway.md](gateway.md)).
+
+Confirm the port posture — the gateway feed port is the only non-loopback bind:
+
+```sh
+docker compose ps
+# gateway    ... 0.0.0.0:18443->8443/tcp        <- the ONLY external port
+# misp-core  ... 127.0.0.1:8080->80, 127.0.0.1:8443->443   <- loopback only
+# san-auth   ... 8080/tcp                       <- not published
+```
+
+Seed demo events (one in-scope, one out-of-scope) and run the full check:
+
+```sh
+./bin/seed-additive-event.sh    # needs bootstrap.sh done first (the tag must exist)
+./bin/verify-gateway.sh         # forces an export, then verifies everything
+```
+
+`verify-gateway.sh` proves the acceptance criteria with `curl`: an allowlisted
+bootroot client fetches the feed (200), a non-allowlisted bootroot client is
+denied (403), a non-bootroot client is rejected, the served feed is structurally
+valid and additive-only, and MISP is not reachable through the gateway. Expect a
+final `All gateway/feed verification checks passed.`
+
+Fetch the feed manually as the allowlisted client:
+
+```sh
+C=gateway/certs
+curl -s --cacert $C/bootroot-ca.pem --cert $C/client-allowed.crt --key $C/client-allowed.key \
+  https://localhost:18443/feed/manifest.json
+curl -s --cacert $C/bootroot-ca.pem --cert $C/client-allowed.crt --key $C/client-allowed.key \
+  https://localhost:18443/feed/fountel-feed-meta.json   # freshness sidecar
+```
+
 ## 5. Idempotency check
 
 Re-running must not duplicate or clobber state:
@@ -136,7 +176,7 @@ Re-running must not duplicate or clobber state:
 ```sh
 ./bin/up.sh          # compose reconciles; no new containers
 ./bin/bootstrap.sh   # settings unchanged, taxonomy already enabled
-docker compose ps    # still exactly four services
+docker compose ps    # still the same set of services
 ```
 
 ## 6. Stop / reset
@@ -149,7 +189,9 @@ docker compose down -v              # stop and DELETE all data (full reset)
 ## Troubleshooting
 
 - **Port already in use:** edit `CORE_HTTP_PORT` / `CORE_HTTPS_PORT` (and the
-  port in `BASE_URL`) in `deploy/dev/.env`, then `./bin/up.sh` again.
+  port in `BASE_URL`) in `deploy/dev/.env`, then `./bin/up.sh` again. For the
+  gateway's external feed port, change `FEED_HTTPS_PORT` the same way (then use
+  that port in the `verify-gateway.sh` / `curl` commands).
 - **`misp-core` never healthy:** `docker compose logs -f misp-core`. First boot
   is slow; the healthcheck allows a 60s start period plus retries. `up.sh --wait`
   exits non-zero (instead of reporting success) if it never goes healthy.
@@ -166,5 +208,13 @@ docker compose down -v              # stop and DELETE all data (full reset)
   or permission error, rejected value) aborts the bootstrap with the cake error
   rather than printing "Bootstrap complete". Check `docker compose logs
   misp-core`, fix the cause, then re-run `./bin/bootstrap.sh` (it is idempotent).
+- **Gateway TLS errors / `verify-gateway.sh` fails on the handshake:** the dev
+  certs may be missing or stale. Regenerate them and recreate the gateway:
+  `./bin/gen-dev-certs.sh --force && docker compose up -d gateway`. See
+  [gateway.md](gateway.md).
+- **`feed-exporter` logs a 403 right after first boot:** harmless startup race —
+  misp-core can report healthy before its admin API key is active. The exporter
+  keeps the schedule alive and succeeds on the next cycle (or run
+  `./bin/verify-gateway.sh`, which forces an export once the key is live).
 - **Bumping versions:** change the pinned tags in `docker-compose.yml`, then
   `docker compose pull && ./bin/up.sh`.

@@ -1,0 +1,38 @@
+# Additive export scope — the PINNED feed-export filter (issue #4).
+#
+# This file is the concrete commitment of "the additive filter". The export
+# job queries the MISP REST API with exactly these criteria, so only
+# additive-scoped events ever reach the published snapshot; abuse.ch / Spamhaus
+# (which aimer-web ingests directly) are excluded by construction because they
+# are never tagged into this scope.
+#
+# Additive scope is defined by BOTH:
+#   * tag `fountel:floor-eligible` — the committed curation taxonomy
+#     (deploy/dev/taxonomies/fountel, docs/curation.md). Only events a curator
+#     has explicitly vetted and tagged are in scope.
+#   * org `fountel` — the vendor-central publishing org. Guards against
+#     re-publishing intel that merely carries the tag but originates elsewhere.
+#
+# Verification criteria (enforced by generate_feed.py before each atomic swap):
+# every event written to the snapshot MUST carry the `fountel:floor-eligible`
+# tag AND belong to org `fountel`. A snapshot containing any out-of-scope event
+# is rejected and NOT published.
+
+# Tags that an event must carry to be in scope (REST API `tags` filter).
+tags:
+  - fountel:floor-eligible
+
+# Creator org that an event must belong to (REST API `org` filter).
+org: fountel
+
+# Attribute distribution levels included in the per-event feed export
+# (PyMISP `to_feed(valid_distributions=...)`). Dev includes all levels so
+# seeded demo events are exported; tighten for prod.
+valid_attribute_distribution_levels: [0, 1, 2, 3, 4, 5]
+
+# GPG-signed feed output is DISABLED by design (issue #4 / #1, secrets posture
+# #10): misp-core autogenerates a disposable instance key on first boot, so
+# there is no stable feed signing key for a consumer to pin. Feed authenticity
+# rides on the mTLS channel + hashes.csv, NOT a signed manifest. Keep false so
+# no `.asc` detached-signature artifact is ever part of the served feed.
+with_signatures: false

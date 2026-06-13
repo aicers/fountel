@@ -6,23 +6,32 @@ isolated by directory so their stacks and secrets never share state.
 
 ```
 deploy/
-  dev/                     # the dev MISP stack (this issue)
-    docker-compose.yml     # misp-core + MariaDB + Redis(Valkey) + misp-modules, pinned
+  dev/                     # the dev MISP stack + additive-sync exposure
+    docker-compose.yml     # misp-core + MariaDB + Redis(Valkey) + misp-modules
+                           #   + gateway (nginx mTLS) + san-auth + feed-exporter, pinned
     .env.example           # non-secret compose interpolation vars
     secrets.example.env    # secret schema (placeholders, non-secret)
     secrets/               # git-ignored secrets, generated locally at bring-up
     taxonomies/fountel/    # fountel:floor-eligible taxonomy definition
-    bin/                   # secrets-init, up, bootstrap
+    gateway/               # nginx.conf (committed) + certs/ (git-ignored dev PEMs)
+    feed-exporter/         # PyMISP feed-export job + pinned export-filter.yaml
+    bin/                   # secrets-init, up, bootstrap, gen-dev-certs, seed, verify
   prod/                    # Phase 2 — placeholder only (see deploy/prod/README.md)
 
-docs/                      # runbook, secrets, curation, environments
+docs/                      # runbook, secrets, curation, environments, gateway
 ```
+
+The #2 SAN-allowlist authorization service the gateway calls lives at the repo
+root under [`gateway/san-auth/`](../gateway/san-auth/) — its own
+independently-developed component, built into the stack as a container.
 
 ## dev
 
 The fully-defined environment. See the [runbook](runbook.md) to bring it up.
-Listens on the host at `https://localhost:8443` (and `http://localhost:8080`)
-by default; change the host ports in `deploy/dev/.env` if they conflict.
+The **admin** UI/API listen on **loopback** at `https://127.0.0.1:8443` (and
+`http://127.0.0.1:8080`); the **mTLS feed gateway** — the only externally-bound
+service — listens at `https://<host>:18443/feed/` (see [gateway.md](gateway.md)).
+Change the host ports in `deploy/dev/.env` if they conflict.
 
 ## prod
 

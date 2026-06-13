@@ -119,6 +119,15 @@ and is git-ignored. Never commit it.
 The `.gitignore` enforces this: `secrets/` and `*.secrets.env` are excluded.
 No secret material — encrypted or otherwise — is committed.
 
+### Gateway mTLS PEMs (a separate path)
+
+The mTLS gateway's bootroot certs are **not** part of this MISP-secrets flow and
+do not pass through `secrets-init.sh`. They are externally-provisioned PEMs
+mounted read-only (in dev, throwaway certs minted by `bin/gen-dev-certs.sh` into
+the git-ignored `deploy/dev/gateway/certs/`). Nothing under `gateway/certs/` is
+committed either — `.gitignore` excludes `deploy/*/gateway/certs/`. See
+[gateway.md](gateway.md).
+
 ## prod (Phase 2)
 
 prod will inject secrets from a **secret manager**, not from anything in this

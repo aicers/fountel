@@ -27,6 +27,14 @@ if [ ! -f "$PLAINTEXT_FILE" ]; then
   "$BIN_DIR/secrets-init.sh"
 fi
 
+# Mint throwaway dev mTLS certs for the gateway on first run, the same way
+# secrets are seeded above. In prod these PEMs are externally provisioned; in
+# dev gen-dev-certs.sh stands in for that (no-op if certs already exist).
+if [ ! -f "$DEV_DIR/gateway/certs/server.crt" ]; then
+  log "No gateway certs found — minting throwaway dev certs with gen-dev-certs.sh."
+  "$BIN_DIR/gen-dev-certs.sh"
+fi
+
 log "Starting dev MISP stack..."
 ( cd "$DEV_DIR" && docker compose up -d )
 

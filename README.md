@@ -20,8 +20,7 @@ not brand itself with it.
 ## Repo boundary
 
 This repository **operates MISP** — the server stack, its configuration and
-hardening, secrets, curation taxonomy, and (later) the mTLS gateway and feed
-publishing.
+hardening, secrets, curation taxonomy, and the mTLS gateway and feed publishing.
 
 The **aimer-web pull adapter** — the code that pulls fountel's published
 feed and imports it into aimer-web — is a **separate, cross-repo effort** and
@@ -49,18 +48,25 @@ coupling between them is the published feed format and the mTLS transport.
   (LLM-enrichment) intel unless a source has been explicitly vetted and tagged
   `fountel:floor-eligible`.
 
+- **Additive-sync exposure** is wired in: an **nginx mTLS gateway** (the only
+  externally-reachable service) fronts a **scheduled, MISP-native feed export**
+  of the additive-scoped snapshot, authorizing clients via the SAN-allowlist
+  service. See [docs/gateway.md](docs/gateway.md).
+
 ## What is NOT part of this dev-MISP stack
 
-- The aimer-web pull adapter — a **separate repo** (see above), not here.
-- The **mTLS gateway** and **feed publishing** — not in this repo yet; tracked
-  separately and deferred to the additive-sync exposure work.
+- The aimer-web pull adapter — a **separate repo** (see above), not here. fountel
+  serves a fetchable, structurally valid feed; consuming/diffing/expiring it is
+  aimer-web's job.
 - prod deployment, backups, HA, and dedicated secret/SSO infrastructure
   (Phase 2 / prod-hardening, deferred).
+- Certificate **issuance/rotation** — the gateway only **consumes**
+  externally-provisioned bootroot mTLS PEMs; fountel builds no issuance machinery.
 
 The **SAN-allowlist authorization service** lives in this repo under
-[`gateway/san-auth/`](gateway/san-auth/) as its own component, but it is **not
-part of this dev-MISP stack** and the stack does not depend on it — the two are
-developed independently.
+[`gateway/san-auth/`](gateway/san-auth/) as its own independently-developed
+component; the dev stack now builds it as a container and the mTLS gateway calls
+it via `auth_request`.
 
 ## Quickstart
 
@@ -80,11 +86,20 @@ cd deploy/dev
 
 # Apply fountel-specific config (taxonomy, baseline settings). Idempotent.
 ./bin/bootstrap.sh
+
+# Verify the mTLS gateway + published feed (seeds demo events, runs curl checks).
+./bin/seed-additive-event.sh
+./bin/verify-gateway.sh
 ```
 
+`up.sh` starts the MISP stack plus the mTLS `gateway`, `san-auth`, and
+`feed-exporter`. The gateway is the only externally-reachable service; MISP's
+UI/API stay loopback-bound and admin-only.
+
 See the **[bring-up runbook](docs/runbook.md)** for the full, copy-pasteable
-procedure and verification commands, and **[docs/](docs/)** for the secret
-bootstrap, curation policy, and environment layout.
+procedure and verification commands, the **[gateway & feed guide](docs/gateway.md)**
+for the exposure design, and **[docs/](docs/)** for the secret bootstrap,
+curation policy, and environment layout.
 
 ## Documentation
 
@@ -93,6 +108,7 @@ bootstrap, curation policy, and environment layout.
 | [docs/runbook.md](docs/runbook.md) | Bring the dev stack up from scratch, with verification commands. |
 | [docs/secrets.md](docs/secrets.md) | Local dev secret generation (nothing committed) and the bootstrap procedure. |
 | [docs/curation.md](docs/curation.md) | The `fountel:floor-eligible` taxonomy and the soft-by-default curation policy. |
+| [docs/gateway.md](docs/gateway.md) | The mTLS gateway, SAN authorization, and additive feed publishing. |
 | [docs/environments.md](docs/environments.md) | dev/prod environment layout and what is deferred to prod. |
 
 ## License
