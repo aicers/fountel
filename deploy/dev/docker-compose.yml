@@ -1,0 +1,140 @@
+# fountel — dev MISP stack
+#
+# Upstream MISP, used as-is (no fork/build). All images are pinned to explicit
+# version tags (no ":latest") so bring-up is reproducible. To bump a version,
+# change the tag here and in docs/runbook.md, then re-pull.
+#
+# Secrets handling (see docs/secrets.md for the full rationale):
+#   Upstream `misp-core` reads its credentials (DB password, SALT, admin
+#   password, GPG passphrase, SMTP) from ENVIRONMENT VARIABLES and has no
+#   `_FILE` / `/run/secrets` convention. Forcing Docker `secrets:` would mean
+#   patching the upstream entrypoint — a fork-like change ruled out by the
+#   "upstream MISP, no fork/build" invariant. So secrets are delivered through
+#   a single, obvious inject path: the deploy step decrypts the committed
+#   sops file `secrets.enc.env` into the git-ignored `secrets/misp.secrets.env`,
+#   which every service loads via `env_file:`. Only the encrypted file is
+#   committed; the decrypted plaintext never leaves the git-ignored dir.
+
+name: fountel-dev
+
+services:
+  redis:
+    # Upstream MISP ships Valkey (a Redis-compatible fork) as its Redis service.
+    image: valkey/valkey:7.2
+    restart: always
+    env_file:
+      - ./secrets/misp.secrets.env
+    environment:
+      - "TZ=${TZ:-UTC}"
+    # The stock valkey image does not read REDIS_PASSWORD on its own, so set
+    # AUTH explicitly from the env-file-injected value. misp-core connects
+    # with the same REDIS_PASSWORD.
+    command: ["sh", "-c", "exec valkey-server --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - cache_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$$REDIS_PASSWORD\" -p 6379 ping | grep -q PONG || exit 1"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 5s
+
+  db:
+    image: mariadb:10.11
+    restart: always
+    env_file:
+      - ./secrets/misp.secrets.env
+    environment:
+      - "MYSQL_USER=${MYSQL_USER:-misp}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE:-misp}"
+      - "TZ=${TZ:-UTC}"
+    command: "--innodb-buffer-pool-size=512M --innodb-change-buffering=none --innodb-io-capacity=1000"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    cap_add:
+      - SYS_NICE
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin --user=$$MYSQL_USER --password=$$MYSQL_PASSWORD status"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 30s
+
+  misp-modules:
+    image: ghcr.io/misp/misp-docker/misp-modules:v3.0.8
+    restart: always
+    environment:
+      - "TZ=${TZ:-UTC}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/bash -c '</dev/tcp/localhost/6666'"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 5s
+
+  misp-core:
+    image: ghcr.io/misp/misp-docker/misp-core:v2.5.40
+    restart: always
+    cap_add:
+      - AUDIT_WRITE
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      misp-modules:
+        condition: service_healthy
+    env_file:
+      - ./secrets/misp.secrets.env
+    environment:
+      # Advertised URL. Dev maps container 443 -> host 8443, so the port is
+      # part of BASE_URL; the internal healthcheck below targets 443 directly.
+      - "BASE_URL=${BASE_URL:-https://localhost:8443}"
+      - "MYSQL_HOST=db"
+      - "MYSQL_PORT=3306"
+      - "MYSQL_USER=${MYSQL_USER:-misp}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE:-misp}"
+      - "REDIS_HOST=redis"
+      - "REDIS_PORT=6379"
+      - "ADMIN_EMAIL=${ADMIN_EMAIL:-admin@fountel.local}"
+      - "ADMIN_ORG=${ADMIN_ORG:-fountel}"
+      # Hardening: do not print the admin credentials to the container log.
+      # The admin password is known from secrets.enc.env, so it is not needed
+      # in the log. Set to "false" for a one-off if you must recover it.
+      - "DISABLE_PRINTING_PLAINTEXT_CREDENTIALS=true"
+      - "ENABLE_DB_SETTINGS=false"
+      - "TZ=${TZ:-UTC}"
+    ports:
+      - "${CORE_HTTP_PORT:-8080}:80"
+      - "${CORE_HTTPS_PORT:-8443}:443"
+    # Named volumes (not host bind mounts) for all MISP runtime state. This
+    # keeps config and DB in lockstep: `docker compose down -v` wipes them
+    # together for a true from-scratch reset. Host bind mounts would persist
+    # across `down -v` and could leave a stale database.php (whose password is
+    # baked in once, not re-derived) desynced from a freshly-initialized DB.
+    volumes:
+      - misp_configs:/var/www/MISP/app/Config/
+      - misp_logs:/var/www/MISP/app/tmp/logs/
+      - misp_files:/var/www/MISP/app/files/
+      - misp_ssl:/etc/nginx/certs/
+      - misp_gnupg:/var/www/MISP/.gnupg/
+    healthcheck:
+      # Target the in-container listener (443) directly so the check is
+      # independent of the host port mapping in BASE_URL.
+      test: ["CMD-SHELL", "curl -ks https://localhost/users/heartbeat > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  mysql_data:
+  cache_data:
+  misp_configs:
+  misp_logs:
+  misp_files:
+  misp_ssl:
+  misp_gnupg:

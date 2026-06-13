@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Secrets — NEVER commit plaintext secret material.
+#
+# Only sops-encrypted files (*.enc.*) are committed. The decrypted plaintext
+# lives in a per-environment `secrets/` directory that is created at deploy
+# time and must stay out of version control.
+# ---------------------------------------------------------------------------
+secrets/
+*.secrets.env
+!*.enc.*
+
+# sops / age private keys — the decryption key never belongs in the repo.
+*.agekey
+*.age.key
+key.txt
+keys.txt
+age-key*.txt
+
+# Local compose interpolation env (the committed template is .env.example).
+.env
+deploy/*/.env
+
+# ---------------------------------------------------------------------------
+# MISP runtime state lives in Docker NAMED VOLUMES (see docker-compose.yml),
+# not host directories, so there is nothing to ignore here. These entries
+# guard against accidentally committing host dirs if a bind mount is ever
+# reintroduced.
+# ---------------------------------------------------------------------------
+deploy/*/configs/
+deploy/*/logs/
+deploy/*/files/
+deploy/*/ssl/
+deploy/*/gnupg/
+deploy/*/custom/
+
+# ---------------------------------------------------------------------------
+# OS / editor noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

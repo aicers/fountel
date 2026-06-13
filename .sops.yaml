@@ -1,0 +1,40 @@
+# sops recipient policy for fountel.
+#
+# This file is the SINGLE source of truth for *who may decrypt* fountel's
+# encrypted secret files. sops uses it whenever a matching `*.enc.*` file is
+# encrypted or re-keyed; each rule lists the age recipients (public keys)
+# allowed to decrypt files under that path.
+#
+# Recipient lifecycle
+# -------------------
+#   Grant decryption to an operator:
+#     1. The operator generates an age key pair and shares only the PUBLIC key
+#        (the `age1...` string). See docs/secrets.md, "Dev secret bootstrap".
+#     2. Add that public key to the relevant rule's `age:` list below.
+#     3. Re-key every affected file so the new recipient can read it:
+#            sops updatekeys deploy/dev/secrets.enc.env
+#
+#   Revoke decryption:
+#     1. Remove the operator's public key from the rule below.
+#     2. `sops updatekeys ...` to drop it from the file metadata.
+#     3. ROTATE the underlying secret values (a removed recipient may still
+#        hold a copy of the old plaintext) — re-run ./bin/secrets-init.sh
+#        with --rotate (see docs/secrets.md).
+#
+# The placeholder keys below MUST be replaced before first use.
+# `./deploy/dev/bin/secrets-init.sh` does this automatically for the dev rule,
+# substituting the public key it generates for the placeholder.
+
+creation_rules:
+  # ---- dev environment -----------------------------------------------------
+  - path_regex: deploy/dev/.*\.enc\.(env|ya?ml|json)$
+    key_groups:
+      - age:
+          # Replaced by secrets-init.sh with the dev operator's public key.
+          - "REPLACE_WITH_DEV_AGE_PUBLIC_KEY"
+
+  # ---- prod environment (Phase 2; recipients added when prod is built) -----
+  - path_regex: deploy/prod/.*\.enc\.(env|ya?ml|json)$
+    key_groups:
+      - age:
+          - "REPLACE_WITH_PROD_AGE_PUBLIC_KEY"
